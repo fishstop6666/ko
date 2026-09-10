@@ -1,0 +1,446 @@
+-- STREAMING_CHUNK:Initializing Admin Nanoi core configuration...
+-- ===================================================================
+-- SCRIPT NAME: Admin Nanoi
+-- DESCRIPTION: Full-featured, easy-to-use Roblox Admin System
+-- AUTHOR: Nanoi Developer
+-- INSTALLATION: Place this Script inside ServerScriptService in Roblox Studio
+-- ===================================================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+-- STREAMING_CHUNK:Defining admin permission settings...
+local CONFIG = {
+Prefix = ";", -- Prefix สำหรับพิมพ์คำสั่ง เช่น ;speed me 50
+-- ใส่ Username ของผู้เล่นที่ต้องการให้เป็นแอดมินที่นี่
+AdminUsernames = {
+"YourUsernameHere", -- เปลี่ยนเป็นชื่อ Roblox ของคุณ
+},
+-- หรือใส่ UserId ของผู้เล่น
+AdminUserIds = {
+123456789, -- เปลี่ยนเป็น UserId ของคุณ
+},
+-- ให้สิทธิ์ Creator ของแมพเป็นแอดมินอัตโนมัติ
+AutoAdminCreator = true
+}
+-- STREAMING_CHUNK:Setting up remote events and storage...
+-- สร้าง RemoteEvent สำหรับ Admin GUI & Announcement
+local AdminRemote = ReplicatedStorage:FindFirstChild("NanoiAdminRemote")
+if not AdminRemote then
+AdminRemote = Instance.new("RemoteEvent")
+AdminRemote.Name = "NanoiAdminRemote"
+AdminRemote.Parent = ReplicatedStorage
+end
+local CommandList = {}
+-- STREAMING_CHUNK:Checking player authorization function...
+local function IsAdmin(player)
+if not player then return false end
+-- ตรวจสอบว่าเป็นเจ้าของแมพหรือไม่
+if CONFIG.AutoAdminCreator and game.CreatorId > 0 then
+if player.UserId == game.CreatorId then
+return true
+end
+end
+-- ตรวจสอบ UserId
+for _, id in ipairs(CONFIG.AdminUserIds) do
+if player.UserId == id then
+return true
+end
+end
+-- ตรวจสอบ Username
+for _, name in ipairs(CONFIG.AdminUsernames) do
+if string.lower(player.Name) == string.lower(name) then
+return true
+end
+end
+return false
+end
+-- STREAMING_CHUNK:Target player finder utility...
+local function FindPlayers(sender, targetName)
+if not targetName or targetName == "" then return {sender} end
+targetName = string.lower(targetName)
+if targetName == "me" then
+return {sender}
+elseif targetName == "all" then
+return Players:GetPlayers()
+elseif targetName == "others" then
+local found = {}
+for _, p in ipairs(Players:GetPlayers()) do
+if p ~= sender then table.insert(found, p) end
+end
+return found
+elseif targetName == "random" then
+local all = Players:GetPlayers()
+return {all[math.random(1, #all)]}
+end
+local matched = {}
+for _, p in ipairs(Players:GetPlayers()) do
+if string.find(string.lower(p.Name), targetName) or string.find(string.lower(p.DisplayName), targetName) then
+table.insert(matched, p)
+end
+end
+return matched
+end
+-- STREAMING_CHUNK:Registering Admin Commands...
+local function RegisterCommand(names, description, usage, callback)
+table.insert(CommandList, {
+Names = names,
+Description = description,
+Usage = usage,
+Callback = callback
+})
+end
+-- STREAMING_CHUNK:Defining core admin actions...
+-- 1. Speed Command (;speed me 50)
+RegisterCommand({"speed", "ws"}, "ปรับความเร็วการเดิน", ";speed [player] [number]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+local speedVal = tonumber(args[2]) or 16
+for _, target in ipairs(targets) do
+if target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+target.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = speedVal
+end
+end
+end)
+-- 2. JumpPower Command (;jump me 100)
+RegisterCommand({"jp", "jump"}, "ปรับแรงกระโดด", ";jump [player] [number]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+local jumpVal = tonumber(args[2]) or 50
+for _, target in ipairs(targets) do
+if target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+local hum = target.Character:FindFirstChildOfClass("Humanoid")
+hum.UseJumpPower = true
+hum.JumpPower = jumpVal
+end
+end
+end)
+-- 3. Teleport Command (;tp me Player2)
+RegisterCommand({"tp", "teleport"}, "วาร์ปไปหาผู้เล่นอื่น", ";tp [player1] [player2]", function(sender, args)
+local p1List = FindPlayers(sender, args[1])
+local p2List = FindPlayers(sender, args[2])
+if #p1List > 0 and #p2List > 0 then
+local targetPos = p2List[1].Character and p2List[1].Character:FindFirstChild("HumanoidRootPart")
+if targetPos then
+for _, p in ipairs(p1List) do
+if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+p.Character.HumanoidRootPart.CFrame = targetPos.CFrame * CFrame.new(0, 0, -3)
+end
+end
+end
+end
+end)
+-- 4. Bring Command (;bring PlayerName)
+RegisterCommand({"bring"}, "ดึงผู้เล่นมาหาเรา", ";bring [player]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+local senderHRP = sender.Character and sender.Character:FindFirstChild("HumanoidRootPart")
+if senderHRP then
+for _, target in ipairs(targets) do
+if target ~= sender and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+target.Character.HumanoidRootPart.CFrame = senderHRP.CFrame * CFrame.new(0, 0, -3)
+end
+end
+end
+end)
+-- 5. Kill Command (;kill all / ;kill player)
+RegisterCommand({"kill"}, "สังหารผู้เล่น", ";kill [player]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+for _, target in ipairs(targets) do
+if target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+target.Character:FindFirstChildOfClass("Humanoid").Health = 0
+end
+end
+end)
+-- 6. Heal Command (;heal me)
+RegisterCommand({"heal"}, "ฟื้นฟูเลือดผู้เล่น", ";heal [player]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+for _, target in ipairs(targets) do
+if target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+local hum = target.Character:FindFirstChildOfClass("Humanoid")
+hum.Health = hum.MaxHealth
+end
+end
+end)
+-- 7. Godmode Command (;god me)
+RegisterCommand({"god"}, "โหมดอมตะ", ";god [player]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+for _, target in ipairs(targets) do
+if target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+local hum = target.Character:FindFirstChildOfClass("Humanoid")
+hum.MaxHealth = math.huge
+hum.Health = math.huge
+end
+end
+end)
+-- 8. Ungod Command (;ungod me)
+RegisterCommand({"ungod"}, "ยกเลิกโหมดอมตะ", ";ungod [player]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+for _, target in ipairs(targets) do
+if target.Character and target.Character:FindFirstChildOfClass("Humanoid") then
+local hum = target.Character:FindFirstChildOfClass("Humanoid")
+hum.MaxHealth = 100
+hum.Health = 100
+end
+end
+end)
+-- 9. BTools Command (;btools me)
+RegisterCommand({"btools"}, "ให้เครื่องมือสร้าง/ลบบล็อก", ";btools [player]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+for _, target in ipairs(targets) do
+if target:FindFirstChild("Backpack") then
+local t1 = Instance.new("HopperBin", target.Backpack)
+t1.BinType = Enum.BinType.Clone
+local t2 = Instance.new("HopperBin", target.Backpack)
+t2.BinType = Enum.BinType.GameTool
+local t3 = Instance.new("HopperBin", target.Backpack)
+t3.BinType = Enum.BinType.Hammer
+end
+end
+end)
+-- 10. Kick Command (;kick PlayerName เหตุผล)
+RegisterCommand({"kick"}, "เตะผู้เล่นออกจากเซิร์ฟเวอร์", ";kick [player] [reason]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+local reason = args[2] or "คุณถูกเตะโดยแอดมิน (Admin Nanoi)"
+for _, target in ipairs(targets) do
+if target ~= sender then
+target:Kick(reason)
+end
+end
+end)
+-- 11. Announcement Command (;m ข้อความ)
+RegisterCommand({"m", "announce"}, "ประกาศข้อความกลางหน้าจอ", ";m [message]", function(sender, args)
+local message = table.concat(args, " ")
+AdminRemote:FireAllClients("Announcement", {Sender = sender.Name, Message = message})
+end)
+-- 12. Invisible / Visible (;invis me / ;vis me)
+RegisterCommand({"invis", "invisible"}, "พรางตัวหายตัว", ";invis [player]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+for _, target in ipairs(targets) do
+if target.Character then
+for _, part in ipairs(target.Character:GetDescendants()) do
+if part:IsA("BasePart") or part:IsA("Decal") then
+part.Transparency = 1
+end
+end
+end
+end
+end)
+RegisterCommand({"vis", "visible"}, "ยกเลิกการหายตัว", ";vis [player]", function(sender, args)
+local targets = FindPlayers(sender, args[1])
+for _, target in ipairs(targets) do
+if target.Character then
+for _, part in ipairs(target.Character:GetDescendants()) do
+if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+part.Transparency = 0
+elseif part:IsA("Decal") then
+part.Transparency = 0
+end
+end
+end
+end
+end)
+-- 13. Cmds GUI Command (;cmds)
+RegisterCommand({"cmds", "help", "admin"}, "เปิด/ปิด เมนู Admin Nanoi Panel", ";cmds", function(sender, args)
+AdminRemote:FireClient(sender, "ToggleGUI")
+end)
+-- STREAMING_CHUNK:Parsing and executing commands...
+local function ExecuteCommand(sender, text)
+if not IsAdmin(sender) then return end
+if string.sub(text, 1, #CONFIG.Prefix) ~= CONFIG.Prefix then return end
+local cleanText = string.sub(text, #CONFIG.Prefix + 1)
+local splitText = string.split(cleanText, " ")
+local cmdName = string.lower(splitText[1])
+local args = {}
+for i = 2, #splitText do
+table.insert(args, splitText[i])
+end
+for _, cmd in ipairs(CommandList) do
+for _, alias in ipairs(cmd.Names) do
+if alias == cmdName then
+local success, err = pcall(function()
+cmd.Callback(sender, args)
+end)
+if not success then
+warn("[Admin Nanoi Error]: " .. tostring(err))
+end
+return
+end
+end
+end
+end
+-- STREAMING_CHUNK:Building client UI script injector...
+local function InjectAdminClientScript(player)
+if not IsAdmin(player) then return end
+local guiScript = Instance.new("LocalScript")
+guiScript.Name = "NanoiAdminClient"
+guiScript.Source = [[
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local AdminRemote = ReplicatedStorage:WaitForChild("NanoiAdminRemote")
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AdminNanoiGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+-- Main Frame (Panel)
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 480, 0, 340)
+mainFrame.Position = UDim2.new(0.5, -240, 0.5, -170)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 24, 33)
+mainFrame.BorderSizePixel = 0
+mainFrame.Visible = false
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+local corner = Instance.new("UICorner", mainFrame)
+corner.CornerRadius = UDim.new(0, 12)
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Color = Color3.fromRGB(0, 170, 255)
+stroke.Thickness = 2
+-- Header Bar
+local header = Instance.new("Frame", mainFrame)
+header.Size = UDim2.new(1, 0, 0, 45)
+header.BackgroundColor3 = Color3.fromRGB(12, 15, 23)
+header.BorderSizePixel = 0
+local headerCorner = Instance.new("UICorner", header)
+headerCorner.CornerRadius = UDim.new(0, 12)
+local title = Instance.new("TextLabel", header)
+title.Text = "⚡ Admin Nanoi Panel"
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextColor3 = Color3.fromRGB(0, 210, 255)
+title.Size = UDim2.new(1, -50, 1, 0)
+title.Position = UDim2.new(0, 15, 0, 0)
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.BackgroundTransparency = 1
+-- Close Button
+local closeBtn = Instance.new("TextButton", header)
+closeBtn.Text = "✕"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 18
+closeBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+closeBtn.Size = UDim2.new(0, 35, 0, 35)
+closeBtn.Position = UDim2.new(1, -40, 0, 5)
+closeBtn.BackgroundTransparency = 1
+closeBtn.MouseButton1Click:Connect(function()
+mainFrame.Visible = false
+end)
+-- Subtitle Info
+local infoLabel = Instance.new("TextLabel", mainFrame)
+infoLabel.Text = "คลิกเพื่อรันคำสั่งด่วน หรือพิมพ์ ;cmds ในแชท"
+infoLabel.Font = Enum.Font.Gotham
+infoLabel.TextSize = 12
+infoLabel.TextColor3 = Color3.fromRGB(160, 175, 200)
+infoLabel.Size = UDim2.new(1, -30, 0, 25)
+infoLabel.Position = UDim2.new(0, 15, 0, 50)
+infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+infoLabel.BackgroundTransparency = 1
+-- Commands List Container
+local scroll = Instance.new("ScrollingFrame", mainFrame)
+scroll.Size = UDim2.new(1, -30, 1, -90)
+scroll.Position = UDim2.new(0, 15, 0, 80)
+scroll.BackgroundTransparency = 1
+scroll.ScrollBarThickness = 6
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+local listLayout = Instance.new("UIListLayout", scroll)
+listLayout.Padding = UDim.new(0, 8)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 10)
+end)
+-- Quick Commands Buttons Data
+local quickCmds = {
+{Name = "Speed 50 (วิ่งเร็ว)", Cmd = ";speed me 50"},
+{Name = "Normal Speed (ความเร็วปกติ)", Cmd = ";speed me 16"},
+{Name = "Jump Power 120 (โดดสูง)", Cmd = ";jump me 120"},
+{Name = "Godmode ON (อมตะ)", Cmd = ";god me"},
+{Name = "Godmode OFF (ยกเลิกอมตะ)", Cmd = ";ungod me"},
+{Name = "Heal Me (เพิ่มเลือด)", Cmd = ";heal me"},
+{Name = "Give BTools (รับเครื่องมือสร้าง)", Cmd = ";btools me"},
+{Name = "Invisible (หายตัว)", Cmd = ";invis me"},
+{Name = "Visible (แสดงตัว)", Cmd = ";vis me"}
+}
+for _, btnData in ipairs(quickCmds) do
+local btn = Instance.new("TextButton", scroll)
+btn.Size = UDim2.new(1, -10, 0, 36)
+btn.BackgroundColor3 = Color3.fromRGB(32, 40, 58)
+btn.Text = "  " .. btnData.Name
+btn.Font = Enum.Font.GothamMedium
+btn.TextColor3 = Color3.fromRGB(240, 240, 240)
+btn.TextSize = 13
+btn.TextXAlignment = Enum.TextXAlignment.Left
+local bCorner = Instance.new("UICorner", btn)
+bCorner.CornerRadius = UDim.new(0, 6)
+btn.MouseButton1Click:Connect(function()
+local TextChatService = game:GetService("TextChatService")
+if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+local generalChannel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+if generalChannel then
+generalChannel:SendAsync(btnData.Cmd)
+end
+end
+end)
+end
+-- Remote Event Listener for Announcement & Toggle
+AdminRemote.OnClientEvent:Connect(function(actionType, data)
+if actionType == "ToggleGUI" then
+mainFrame.Visible = not mainFrame.Visible
+elseif actionType == "Announcement" then
+-- Screen Announcement Overlay
+local announceFrame = Instance.new("Frame", screenGui)
+announceFrame.Size = UDim2.new(0, 480, 0, 90)
+announceFrame.Position = UDim2.new(0.5, -240, 0.15, 0)
+announceFrame.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+announceFrame.BackgroundTransparency = 0.1
+local aCorner = Instance.new("UICorner", announceFrame)
+aCorner.CornerRadius = UDim.new(0, 10)
+local aStroke = Instance.new("UIStroke", announceFrame)
+aStroke.Color = Color3.fromRGB(255, 170, 0)
+aStroke.Thickness = 2
+local aTitle = Instance.new("TextLabel", announceFrame)
+aTitle.Text = "📢 ประกาศจากแอดมิน: " .. string.upper(data.Sender)
+aTitle.Font = Enum.Font.GothamBold
+aTitle.TextColor3 = Color3.fromRGB(255, 170, 0)
+aTitle.TextSize = 14
+aTitle.Size = UDim2.new(1, 0, 0, 30)
+aTitle.BackgroundTransparency = 1
+local aMsg = Instance.new("TextLabel", announceFrame)
+aMsg.Text = data.Message
+aMsg.Font = Enum.Font.GothamMedium
+aMsg.TextColor3 = Color3.fromRGB(255, 255, 255)
+aMsg.TextSize = 16
+aMsg.Size = UDim2.new(1, -20, 1, -35)
+aMsg.Position = UDim2.new(0, 10, 0, 30)
+aMsg.TextWrapped = true
+aMsg.BackgroundTransparency = 1
+task.delay(5, function()
+local tween = TweenService:Create(announceFrame, TweenInfo.new(1), {BackgroundTransparency = 1})
+tween:Play()
+tween.Completed:Connect(function()
+announceFrame:Destroy()
+end)
+end)
+end
+end)
+]]
+guiScript.Parent = player:WaitForChild("PlayerGui")
+end
+-- STREAMING_CHUNK:Binding player join events...
+Players.PlayerAdded:Connect(function(player)
+player.Chatted:Connect(function(message)
+ExecuteCommand(player, message)
+end)
+task.delay(1, function()
+InjectAdminClientScript(player)
+end)
+end)
+for _, player in ipairs(Players:GetPlayers()) do
+player.Chatted:Connect(function(message)
+ExecuteCommand(player, message)
+end)
+InjectAdminClientScript(player)
+end
+print("")
+print("[Admin Nanoi] สคริปต์ทำงานสมบูรณ์แล้ว!")
+print("พิมพ์ ;cmds ในแชทเพื่อเปิดเมนู Admin Panel")
+print("")
